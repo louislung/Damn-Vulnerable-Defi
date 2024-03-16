@@ -3,8 +3,9 @@ pragma solidity ^0.8.0;
 
 import "solady/src/utils/FixedPointMathLib.sol";
 import "solady/src/utils/SafeTransferLib.sol";
-import { RewardToken } from "./RewardToken.sol";
-import { AccountingToken } from "./AccountingToken.sol";
+import {RewardToken} from "./RewardToken.sol";
+import {AccountingToken} from "./AccountingToken.sol";
+import "hardhat/console.sol";
 
 /**
  * @title TheRewarderPool
@@ -15,7 +16,7 @@ contract TheRewarderPool {
 
     // Minimum duration of each round of rewards in seconds
     uint256 private constant REWARDS_ROUND_MIN_DURATION = 5 days;
-    
+
     uint256 public constant REWARDS = 100 ether;
 
     // Token deposited into the pool by users
@@ -56,6 +57,7 @@ contract TheRewarderPool {
 
         accountingToken.mint(msg.sender, amount);
         distributeRewards();
+        console.log("deposit - distributeRewards done");
 
         SafeTransferLib.safeTransferFrom(
             liquidityToken,
@@ -63,25 +65,49 @@ contract TheRewarderPool {
             address(this),
             amount
         );
+        console.log("deposit - safeTransferFrom done");
     }
 
     function withdraw(uint256 amount) external {
+        console.log("withdraw - start");
         accountingToken.burn(msg.sender, amount);
+        console.log("withdraw - burned");
         SafeTransferLib.safeTransfer(liquidityToken, msg.sender, amount);
+        console.log("withdraw - transfered");
     }
 
     function distributeRewards() public returns (uint256 rewards) {
+        console.log("distributeRewards - start");
         if (isNewRewardsRound()) {
+            console.log("distributeRewards - isNewRewardsRound true");
             _recordSnapshot();
         }
 
-        uint256 totalDeposits = accountingToken.totalSupplyAt(lastSnapshotIdForRewards);
-        uint256 amountDeposited = accountingToken.balanceOfAt(msg.sender, lastSnapshotIdForRewards);
+        uint256 totalDeposits = accountingToken.totalSupplyAt(
+            lastSnapshotIdForRewards
+        );
+        console.log("distributeRewards - totalDeposits", totalDeposits);
+
+        uint256 amountDeposited = accountingToken.balanceOfAt(
+            msg.sender,
+            lastSnapshotIdForRewards
+        );
+        console.log("distributeRewards - amountDeposited", amountDeposited);
 
         if (amountDeposited > 0 && totalDeposits > 0) {
             rewards = amountDeposited.mulDiv(REWARDS, totalDeposits);
+            console.log("distributeRewards - rewards", rewards);
+            console.log(
+                "distributeRewards - _hasRetrievedReward",
+                _hasRetrievedReward(msg.sender)
+            );
             if (rewards > 0 && !_hasRetrievedReward(msg.sender)) {
                 rewardToken.mint(msg.sender, rewards);
+                console.log(
+                    "distributeRewards - rewardToken.balanceOf(msg.sender)",
+                    rewardToken.balanceOf(msg.sender),
+                    msg.sender
+                );
                 lastRewardTimestamps[msg.sender] = uint64(block.timestamp);
             }
         }
@@ -96,13 +122,15 @@ contract TheRewarderPool {
     }
 
     function _hasRetrievedReward(address account) private view returns (bool) {
-        return (
-            lastRewardTimestamps[account] >= lastRecordedSnapshotTimestamp
-                && lastRewardTimestamps[account] <= lastRecordedSnapshotTimestamp + REWARDS_ROUND_MIN_DURATION
-        );
+        return (lastRewardTimestamps[account] >=
+            lastRecordedSnapshotTimestamp &&
+            lastRewardTimestamps[account] <=
+            lastRecordedSnapshotTimestamp + REWARDS_ROUND_MIN_DURATION);
     }
 
     function isNewRewardsRound() public view returns (bool) {
-        return block.timestamp >= lastRecordedSnapshotTimestamp + REWARDS_ROUND_MIN_DURATION;
+        return
+            block.timestamp >=
+            lastRecordedSnapshotTimestamp + REWARDS_ROUND_MIN_DURATION;
     }
 }
